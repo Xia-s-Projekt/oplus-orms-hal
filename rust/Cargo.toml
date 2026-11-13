@@ -1,0 +1,20 @@
+[package]
+name = "orms-service"
+version = "1.0.0"
+edition = "2021"
+
+# lib: the node writers and the remap (host-testable core).
+[lib]
+name = "orms_service"
+path = "src/lib.rs"
+
+# bin: the Android AIDL HAL binary. The shipped artifact name has dots, so
+# the build wraps the output (see ../../scripts/build_rust.sh).
+[[bin]]
+name = "orms_service"
+path = "src/bin/orms_service.rs"
+
+[profile.release]
+opt-level = 2
+debug = false
+strip = "symbols"

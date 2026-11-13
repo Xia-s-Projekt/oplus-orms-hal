@@ -1,0 +1,7 @@
+# Pinned to the rustc that produced the staged HAL binary (see the verify
+# checklist in TODO.md): byte-identical reproduction of the staged artifact
+# only holds at this version.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+targets = ["aarch64-linux-android"]
