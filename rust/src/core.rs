@@ -80,11 +80,18 @@ fn first_int_of(s: &str) -> Option<i32> {
     s[..end].parse::<i32>().ok()
 }
 
+fn is_thermal_throttle_node(path: &str) -> bool {
+    path.starts_with("/sys/class/thermal/") || path.ends_with("/scaling_max_freq")
+}
+
 /// Writes `value` to `path`, resolving the node against the device's actual
-/// topology first. The shipped service logged the resolved node and the value
-/// at INFO; the write's own success is not reported back.
+/// topology first. Thermal throttling nodes are quietly no-oped so the main
+/// thermal HAL retains sole control.
 pub fn write_node(path: &str, value: &str) {
     let node = node_remap::resolve_node(path);
+    if is_thermal_throttle_node(&node) {
+        return;
+    }
     io_shim::write_file(&node, value);
 }
 
@@ -479,14 +486,7 @@ pub fn orms_write_node_common(id: i32, cluster: i32, value: &str) {
             ),
             value,
         ),
-        2 => write_node(
-            &fmt_path("/sys/class/thermal/thermal_zone{}/mode", cluster),
-            value,
-        ),
-        3 => write_node(
-            &fmt_path("/sys/class/thermal/thermal_zone{}/sustainable_power", cluster),
-            value,
-        ),
+        2 | 3 => {}
         _ => {}
     }
 }
@@ -659,12 +659,18 @@ mod tests {
     }
 
     #[test]
-    fn node_common_dispatches_on_id_and_rejects_unknown() {
+    fn node_common_dispatches_on_id_and_noops_thermal() {
         let (r, _g) = setup("nodecommon");
+        mk(&r, "sys/devices/system/cpu/cpu0/cpufreq/uag");
         mk(&r, "sys/class/thermal/thermal_zone1");
+        orms_write_node_common(0, 0, "1000");
         orms_write_node_common(2, 1, "enabled");
         orms_write_node_common(9, 0, "x");
-        assert_eq!(read(&r, "sys/class/thermal/thermal_zone1/mode"), "enabled");
+        assert_eq!(
+            read(&r, "sys/devices/system/cpu/cpu0/cpufreq/uag/up_rate_limit_us"),
+            "1000"
+        );
+        assert!(fs::read_to_string(r.join("sys/class/thermal/thermal_zone1/mode")).is_err());
         assert!(fs::read_to_string(r.join("sys/class/thermal/thermal_zone0/mode")).is_err());
         teardown(&r);
     }
