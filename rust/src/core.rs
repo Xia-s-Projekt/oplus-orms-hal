@@ -23,6 +23,9 @@ pub struct Service {
     /// The boost request table keyed by handle, holding the (opcode, value)
     /// pairs the acquired boosts registered.
     boosts: Mutex<HashMap<i32, Vec<(u32, i32)>>>,
+    /// Bitmask of active simulated MTK boost sources when OPlus/Qcom boost
+    /// nodes are absent on X6739.
+    sim_boost_mask: Mutex<u32>,
 }
 
 impl Service {
@@ -34,6 +37,7 @@ impl Service {
             has_fbg_knobs,
             kernel_version,
             boosts: Mutex::new(HashMap::new()),
+            sim_boost_mask: Mutex::new(0),
         }
     }
 
@@ -99,19 +103,63 @@ fn fmt_path(template: &str, cluster: i32) -> String {
 // Boost requests
 // ---------------------------------------------------------------------------
 
-/// The shipped implementation stored each boost as a resource keyed by
-/// (opcode, value); nothing downstream consumes the table except release.
-pub fn orms_boost_acquire(service: &Service, pl_handle: i32, boosts_list: &[i32]) {
-    let mut boosts = service.boosts.lock().unwrap();
-    let entry = boosts.entry(pl_handle).or_default();
-    for value in boosts_list {
-        entry.push(((*value as u32), *value));
+const SIM_BIT_ACQUIRE: u32 = 1 << 0;
+const SIM_BIT_INPUT: u32 = 1 << 1;
+const SIM_BIT_SLIDE: u32 = 1 << 2;
+const SIM_BIT_TOUCH: u32 = 1 << 3;
+const SIM_BIT_ASYMCAP: u32 = 1 << 4;
+
+fn value_is_enabled(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "0" {
+        return false;
+    }
+    trimmed.parse::<i64>().map(|n| n != 0).unwrap_or(true)
+}
+
+fn set_sim_boost_bit(service: &Service, bit: u32, active: bool) {
+    let mut mask = service.sim_boost_mask.lock().unwrap();
+    let prev = *mask != 0;
+    if active {
+        *mask |= bit;
+    } else {
+        *mask &= !bit;
+    }
+    let next = *mask != 0;
+    drop(mask);
+    if prev == next {
+        return;
+    }
+    if io_shim::exists("/dev/cpuctl/top-app/cpu.uclamp.min") {
+        io_shim::write_file("/dev/cpuctl/top-app/cpu.uclamp.min", if next { "30" } else { "0" });
+    }
+    if io_shim::exists("/sys/kernel/fpsgo/common/force_onoff") {
+        io_shim::write_file(
+            "/sys/kernel/fpsgo/common/force_onoff",
+            if next { "force on" } else { "force off" },
+        );
     }
 }
 
+pub fn orms_boost_acquire(service: &Service, pl_handle: i32, boosts_list: &[i32]) {
+    let non_empty = {
+        let mut boosts = service.boosts.lock().unwrap();
+        let entry = boosts.entry(pl_handle).or_default();
+        for value in boosts_list {
+            entry.push(((*value as u32), *value));
+        }
+        !boosts.is_empty()
+    };
+    set_sim_boost_bit(service, SIM_BIT_ACQUIRE, non_empty);
+}
+
 pub fn orms_boost_release(service: &Service, pl_handle: i32) {
-    let mut boosts = service.boosts.lock().unwrap();
-    boosts.remove(&pl_handle);
+    let non_empty = {
+        let mut boosts = service.boosts.lock().unwrap();
+        boosts.remove(&pl_handle);
+        !boosts.is_empty()
+    };
+    set_sim_boost_bit(service, SIM_BIT_ACQUIRE, non_empty);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,10 +327,15 @@ pub fn orms_write_hwmon_hyst_opt(value: &str) {
 }
 
 pub fn orms_write_input_boost_enabled(service: &Service, value: &str) {
-    if service.has_fbg_knobs {
-        write_node("/proc/sys/fbg/input_boost_enabled", value);
+    let path = if service.has_fbg_knobs {
+        "/proc/sys/fbg/input_boost_enabled"
     } else {
-        write_node("/proc/sys/kernel/input_boost_enabled", value);
+        "/proc/sys/kernel/input_boost_enabled"
+    };
+    let node = node_remap::resolve_node(path);
+    io_shim::write_file(&node, value);
+    if !io_shim::exists(&node) {
+        set_sim_boost_bit(service, SIM_BIT_INPUT, value_is_enabled(value));
     }
 }
 
@@ -342,10 +395,15 @@ pub fn orms_write_sleep_disabled(value: &str) {
 }
 
 pub fn orms_write_slide_boost(service: &Service, value: &str) {
-    if service.has_fbg_knobs {
-        write_node("/proc/sys/fbg/slide_boost_enabled", value);
+    let path = if service.has_fbg_knobs {
+        "/proc/sys/fbg/slide_boost_enabled"
     } else {
-        write_node("/proc/sys/kernel/slide_boost_enabled", value);
+        "/proc/sys/kernel/slide_boost_enabled"
+    };
+    let node = node_remap::resolve_node(path);
+    io_shim::write_file(&node, value);
+    if !io_shim::exists(&node) {
+        set_sim_boost_bit(service, SIM_BIT_SLIDE, value_is_enabled(value));
     }
 }
 
@@ -363,8 +421,12 @@ pub fn orms_write_top_cpu_uclamp_min(value: &str) {
     write_node("/dev/cpuctl/top-app/cpu.uclamp.min", value);
 }
 
-pub fn orms_write_touch_boost(value: &str) {
-    write_node("/proc/perfmgr/tchbst/user/usrtch", value);
+pub fn orms_write_touch_boost(service: &Service, value: &str) {
+    let node = node_remap::resolve_node("/proc/perfmgr/tchbst/user/usrtch");
+    io_shim::write_file(&node, value);
+    if !io_shim::exists(&node) {
+        set_sim_boost_bit(service, SIM_BIT_TOUCH, value_is_enabled(value));
+    }
 }
 
 pub fn orms_write_tracing_set_event(value: &str) {
@@ -380,8 +442,12 @@ pub fn orms_write_hal_ufs_plus_ctrl(value1: &str, value2: &str) {
     write_node("/proc/ufsplus_ctrl/wbfn_dynamic_tw_enable", value2);
 }
 
-pub fn orms_write_sched_asymcap_boost(value: &str) {
-    write_node("/proc/sys/walt/sched_asymcap_boost", value);
+pub fn orms_write_sched_asymcap_boost(service: &Service, value: &str) {
+    let node = node_remap::resolve_node("/proc/sys/walt/sched_asymcap_boost");
+    io_shim::write_file(&node, value);
+    if !io_shim::exists(&node) {
+        set_sim_boost_bit(service, SIM_BIT_ASYMCAP, value_is_enabled(value));
+    }
 }
 
 pub fn orms_write_cpu_cpu_ddr_lat_min(cluster: i32, value: &str) {
@@ -481,6 +547,7 @@ mod tests {
             has_fbg_knobs: false,
             kernel_version: String::new(),
             boosts: Mutex::new(HashMap::new()),
+            sim_boost_mask: Mutex::new(0),
         }
     }
 
@@ -619,5 +686,33 @@ mod tests {
         assert_eq!(first_int_of("5.10.198").unwrap(), 5);
         assert_eq!(first_int_of("198").unwrap(), 198);
         assert!(first_int_of("nope").is_none());
+    }
+
+    #[test]
+    fn sim_boost_drives_mtk_nodes_when_oplus_nodes_absent() {
+        let guard = io_shim::test_lock();
+        let root = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/target/test_simboost"));
+        let _ = fs::remove_dir_all(&root);
+        io_shim::set_test_root(root.to_str().unwrap());
+        w(&root, "dev/cpuctl/top-app/cpu.uclamp.min", "0");
+        w(&root, "sys/kernel/fpsgo/common/force_onoff", "force off");
+
+        let svc = service();
+        orms_boost_acquire(&svc, 1, &[100]);
+        assert_eq!(read(&root, "dev/cpuctl/top-app/cpu.uclamp.min"), "30");
+        assert_eq!(read(&root, "sys/kernel/fpsgo/common/force_onoff"), "force on");
+
+        // Second source keeps boost active until both release.
+        orms_write_touch_boost(&svc, "1");
+        orms_boost_release(&svc, 1);
+        assert_eq!(read(&root, "dev/cpuctl/top-app/cpu.uclamp.min"), "30");
+
+        orms_write_touch_boost(&svc, "0");
+        assert_eq!(read(&root, "dev/cpuctl/top-app/cpu.uclamp.min"), "0");
+        assert_eq!(read(&root, "sys/kernel/fpsgo/common/force_onoff"), "force off");
+
+        io_shim::clear_test_root();
+        let _ = fs::remove_dir_all(&root);
+        drop(guard);
     }
 }

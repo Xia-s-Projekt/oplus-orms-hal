@@ -268,7 +268,7 @@ fn dispatch(
         }
         38 => {
             let value = read_string(in_parcel)?;
-            core::orms_write_touch_boost(&value);
+            core::orms_write_touch_boost(&svc.inner, &value);
             write_ok_status(out_parcel)
         }
         39 => {
@@ -289,7 +289,7 @@ fn dispatch(
         }
         42 => {
             let value = read_string(in_parcel)?;
-            core::orms_write_sched_asymcap_boost(&value);
+            core::orms_write_sched_asymcap_boost(&svc.inner, &value);
             write_ok_status(out_parcel)
         }
         43 => {
