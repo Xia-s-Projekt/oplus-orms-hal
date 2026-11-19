@@ -1,8 +1,13 @@
 # OplusOrms
 
-A Rust implementation of the OPlus ORMS AIDL HAL service.
+A Rust implementation of the OPlus ORMS (OPlus Resource Management Service)
+AIDL HAL.
 
 ## What it does
+
+Functionally, ORMS is the scheduler and DVFS control surface. The framework uses
+it to read available CPU and GPU frequency tables and to write scheduler,
+boost-frequency and thermal-tuning values into kernel nodes.
 
 `OplusOrms` implements the
 `vendor.oplus.hardware.ormsHalService.IOrmsAidlHalService` interface. It exposes
