@@ -9,6 +9,11 @@
 
 use crate::io_shim;
 
+#[cfg(not(test))]
+use std::collections::HashMap;
+#[cfg(not(test))]
+use std::sync::{Mutex, OnceLock};
+
 /// Only nodes whose MTK counterpart drives the same control are listed:
 /// kgsl -> mali is the same GPU frequency on a different GPU driver. The
 /// cpufreq governor nodes resolve at run time (see resolve_governor_node) and
@@ -460,10 +465,41 @@ fn resolve_governor_node(path: &str) -> String {
     String::new()
 }
 
+/// Process-lifetime cache of input paths to their resolved node. The HAL
+/// addresses a fixed node set on every transaction, while resolution stats
+/// sysfs nodes, reads the active governor and scans devfreq domains; caching
+/// keeps that work off the 4-thread binder pool's hot path. Host tests bypass
+/// it so each fixture root resolves independently.
+#[cfg(not(test))]
+static NODE_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+#[cfg(not(test))]
+pub fn resolve_node(path: &str) -> String {
+    let cache = NODE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(cached) = cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(path)
+    {
+        return cached.clone();
+    }
+    let resolved = resolve_node_uncached(path);
+    cache
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(path.to_string(), resolved.clone());
+    resolved
+}
+
+#[cfg(test)]
+pub fn resolve_node(path: &str) -> String {
+    resolve_node_uncached(path)
+}
+
 /// Returns the path to actually use for `path`: the original path when it
 /// exists, otherwise the equivalent node when one is known and
 /// present, otherwise `path` unchanged (so the original error path runs).
-pub fn resolve_node(path: &str) -> String {
+fn resolve_node_uncached(path: &str) -> String {
     if io_shim::exists(path) {
         return path.to_string();
     }

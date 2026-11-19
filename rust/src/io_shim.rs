@@ -7,14 +7,26 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[cfg(test)]
 use std::sync::Mutex;
 
+#[cfg(test)]
 static TEST_ROOT: Mutex<Option<String>> = Mutex::new(None);
+
+/// On device, paths are already absolute sysfs/proc paths: return them
+/// unchanged. Host tests prepend their fixture root (see the `cfg(test)`
+/// definition below) so remap and discovery run against a fake sysfs tree.
+#[cfg(not(test))]
+pub fn resolve(path: &Path) -> PathBuf {
+    path.to_path_buf()
+}
 
 /// Prepends the test root when set. Idempotent: a path already under the
 /// root is returned unchanged, because callers legitimately hand a resolved
 /// path (from a directory listing or a canonicalized symlink) back to the
 /// read/write helpers.
+#[cfg(test)]
 pub fn resolve(path: &Path) -> PathBuf {
     if path.is_absolute() {
         let root = lock(&TEST_ROOT).clone();
@@ -111,6 +123,7 @@ pub fn test_lock() -> std::sync::MutexGuard<'static, ()> {
 
 /// A panicking test poisons its guard; the fixture lock only serializes
 /// tests, so recovering the guard is correct here.
+#[cfg(test)]
 fn lock<T>(m: &'static Mutex<T>) -> std::sync::MutexGuard<'static, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
