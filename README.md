@@ -47,6 +47,10 @@ scripts/
   its path. The build script defaults to a relative path to a sibling vendor
   tree of this checkout.
 
+## Prebuilt
+
+[Get Prebuilt](https://github.com/Xia-s-Projekt/oplus-orms-hal/releases/latest) — prebuilt AArch64 service binary.
+
 ## Build
 
 ```sh
