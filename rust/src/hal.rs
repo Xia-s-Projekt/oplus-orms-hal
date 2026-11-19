@@ -3,8 +3,7 @@
 // getInterfaceHash pair.
 //
 // Method order is the AIDL transaction-code order (1..46 in declaration
-// order, verified against the shipped BnOrmsAidlHalService dispatch and the
-// Java stub). Every method returns void except the three readers
+// order). Every method returns void except the three readers
 // (ormsReadDdrAvailFreq, ormsReadFile, ormsReadGpuFreq), which return a
 // String. In-parameters are read in declaration order. The interface token
 // is consumed by libbinder before onTransact.

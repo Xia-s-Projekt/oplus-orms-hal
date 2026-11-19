@@ -1,10 +1,8 @@
 // The Orms HAL core: every IOrmsAidlHalService method against its node set.
 //
-// Each write goes through node_remap::resolve_node, which keeps the shipped
-// Qualcomm path first and falls back to the MTK/Transsion node that drives
-// the same control when the original is absent. Behaviour is translated from
-// the C++ reconstruction at OplusPowerRpmhOrms/src/orms/OrmsHalService.cpp
-// (kept in the OOS root's history).
+// Each write goes through node_remap::resolve_node, which keeps the original
+// path first and falls back to the equivalent node that drives the same
+// control when the original is absent.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -13,18 +11,16 @@ use crate::io_shim;
 use crate::node_remap;
 
 pub struct Service {
-    /// The shipped constructor probes the "fbg" variants of the slide and
-    /// input-boost knobs; when either exists the fbg path is used instead of
-    /// the plain one.
+    /// Probes the "fbg" variants of the slide and input-boost knobs; when
+    /// either exists the fbg path is used instead of the plain one.
     has_fbg_knobs: bool,
-    /// The kernel version parsed out of /proc/version, logged at startup by
-    /// the shipped constructor.
+    /// The kernel version parsed out of /proc/version, logged at startup.
     kernel_version: String,
     /// The boost request table keyed by handle, holding the (opcode, value)
     /// pairs the acquired boosts registered.
     boosts: Mutex<HashMap<i32, Vec<(u32, i32)>>>,
-    /// Bitmask of active simulated MTK boost sources when OPlus/Qcom boost
-    /// nodes are absent on X6739.
+    /// Bitmask of active simulated boost sources when the platform-specific
+    /// boost nodes are absent.
     sim_boost_mask: Mutex<u32>,
 }
 
@@ -46,7 +42,7 @@ impl Service {
     }
 
     /// "Linux version %d.%d.%d" parsed out of /proc/version; empty when the
-    /// node is absent, matching the shipped constructor's fallthrough.
+    /// node is absent, matching the constructor's fallthrough.
     fn kernel_version_string() -> String {
         match io_shim::read_file("/proc/version") {
             Some(version) => {
@@ -177,9 +173,9 @@ pub fn orms_read_file(path: &str) -> String {
     read_node(path).unwrap_or_default()
 }
 
-/// The shipped binary looks the cluster up in a table of the per-cluster DDR
-/// latency devfreq nodes' available_frequencies; on this device the node
-/// resolves against the memory domain the kernel actually has.
+/// Looks the cluster up in a table of the per-cluster DDR latency devfreq
+/// nodes' available_frequencies; the node resolves against the memory domain
+/// the kernel actually has.
 pub fn orms_read_ddr_avail_freq(cluster: i32) -> String {
     const PATHS: [&str; 3] = [
         "/sys/class/devfreq/soc:qcom,cpu0-llcc-ddr-lat/available_frequencies",
@@ -305,8 +301,8 @@ pub fn orms_write_cpu_llcc_lat_max(cluster: i32, value: &str) {
 }
 
 pub fn orms_write_cpu_online(check_mask: i32, online_mask: i32) {
-    // The shipped binary writes the same value to both the isolation and the
-    // de-isolation node; the check mask gates the pair in the caller.
+    // The same value is written to both the isolation and the de-isolation
+    // node; the check mask gates the pair in the caller.
     let _ = check_mask;
     let value = online_mask.to_string();
     write_node("/proc/perfmgr/boost_ctrl/eas_ctrl/set_sched_isolation", &value);
@@ -468,8 +464,7 @@ pub fn orms_write_cpu_cpu_ddr_bw_min(value: &str) {
     write_node("/sys/class/devfreq/soc:qcom,cpu-cpu-ddr-bw/min_freq", value);
 }
 
-/// The shipped binary dispatches on a table of node ids; an unknown id is
-/// ignored with a debug log.
+/// Dispatches on a table of node ids; an unknown id is ignored with a debug log.
 pub fn orms_write_node_common(id: i32, cluster: i32, value: &str) {
     match id {
         0 => write_node(

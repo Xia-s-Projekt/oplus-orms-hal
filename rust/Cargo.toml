@@ -8,7 +8,7 @@ edition = "2021"
 name = "orms_service"
 path = "src/lib.rs"
 
-# bin: the Android AIDL HAL binary. The shipped artifact name has dots, so
+# bin: the Android AIDL HAL binary. The installed artifact name has dots, so
 # the build wraps the output (see ../../scripts/build_rust.sh).
 [[bin]]
 name = "orms_service"

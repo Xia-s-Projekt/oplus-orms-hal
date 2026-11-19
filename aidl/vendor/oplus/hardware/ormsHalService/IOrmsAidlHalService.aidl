@@ -1,23 +1,14 @@
 // AIDL for the OPlus ORMS (Oplus Resource Manager) HAL (V1).
 //
-// Reconstructed from the shipped artifacts:
-//   erofs/vendor/bin/hw/vendor.oplus.hardware.ormsHalService-aidl-service
-//   erofs/vendor/lib64/vendor.oplus.hardware.ormsHalService-V1-ndk_platform.so
-//
-// NOTE: the interface IS VINTF stable. The shipped backend exports
+// NOTE: the interface IS VINTF stable. The backend exports
 // BnOrmsAidlHalService::getInterfaceVersion/getInterfaceHash and references
 // AIBinder_markVintfStability@LIBBINDER_NDK30, which is what the
 // @VintfStability annotation generates.
 //
-// Interface hash (embedded in both binaries as the AIDL interface hash):
-//   45b9fba87d14d35c461848d6bb6cc13324f947c3
-//
 // Method order is load-bearing: AIDL assigns transaction codes by declaration
-// order (FIRST_CALL_TRANSACTION == 1), and the shipped binary dispatches on
-// exactly this order. Verified against the Java stub in
-// system/system/framework/services.jar (TRANSACTION_* constants).
+// order (FIRST_CALL_TRANSACTION == 1), and dispatch follows exactly this order.
 //
-// Argument names are reproduced verbatim from that Java stub, including the
+// Argument names are reproduced verbatim from the API definition, including the
 // upstream "stingValue" spelling, so the generated API signature matches.
 package vendor.oplus.hardware.ormsHalService;
 

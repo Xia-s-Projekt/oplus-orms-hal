@@ -1,13 +1,11 @@
 // NodeRemap — device path resolution for the Orms HAL.
 //
-// The shipped ORMS HAL was written for a Qualcomm platform: most of the knobs
-// it drives live under soc:qcom / qcom,bwmon-* / walt / kgsl paths that do not
-// exist on the MT6893 (Transsion) kernel this ROM runs on. The ORIGINAL path
-// is always tried first so the port behaves identically on a Qualcomm kernel;
-// only when the original node is absent do we fall back to the MTK/Transsion
-// node, and only where that node drives the same control. A node with no
-// counterpart is deliberately left unmapped rather than redirected at an
-// unrelated knob.
+// The ORMS HAL's original node set targets a Qualcomm platform: most knobs
+// live under soc:qcom / qcom,bwmon-* / walt / kgsl paths that may not exist on
+// the target kernel. The original path is always tried first; only when it is
+// absent do we fall back to an equivalent node that drives the same control.
+// A node with no counterpart is deliberately left unmapped rather than
+// redirected at an unrelated knob.
 
 use crate::io_shim;
 
@@ -217,7 +215,7 @@ pub fn gpu_domain() -> Option<FreqDomain> {
         .find(|d| d.kind == DomainKind::Gpu)
 }
 
-/// MT6893 cluster layout used only when the per-core symlink is missing:
+/// Fallback cluster layout used only when the per-core symlink is missing:
 /// cpu0..3 -> policy0, cpu4..6 -> policy1, cpu7 -> policy2.
 fn cluster_index(cpu: i32) -> usize {
     match cpu {
@@ -285,7 +283,7 @@ fn cluster_of(name: &str) -> i32 {
     -1
 }
 
-/// The eight Qualcomm devfreq families the shipped HAL drives, resolved
+/// The eight Qualcomm devfreq families the HAL drives, resolved
 /// against the domains this kernel has by the control they represent, never
 /// by name:
 ///   llcc-ddr-lat, cpu-ddr-lat, cpu-ddr-latfloor, cpu-ddr-bw
@@ -380,7 +378,7 @@ fn resolve_devfreq_node(path: &str) -> String {
     String::new()
 }
 
-/// The governor attributes the shipped HAL addresses, with the attribute
+/// The governor attributes the HAL addresses, with the attribute
 /// names the active governor may use for the same control, most specific
 /// first. up/down_rate_limit_us are the directional ramp-rate knobs;
 /// schedutil and schedhorizon expose a single undirectional rate_limit_us,
@@ -418,8 +416,7 @@ fn is_policy_dir(dir: &str) -> bool {
 /// Rewrites a "<policy>/<governor>/<attribute>" path to the active
 /// governor's directory, when that governor has the attribute. The governor
 /// name the kernel publishes is used AS the directory, so the resolution
-/// works for every governor this kernel can have, not only the three the
-/// shipped binary hardcoded.
+/// works for every governor this kernel can have, not only a fixed set.
 fn resolve_governor_node(path: &str) -> String {
     let attr_pos = match path.rfind('/') {
         Some(p) => p,
@@ -464,7 +461,7 @@ fn resolve_governor_node(path: &str) -> String {
 }
 
 /// Returns the path to actually use for `path`: the original path when it
-/// exists, otherwise the MTK/Transsion equivalent when one is known and
+/// exists, otherwise the equivalent node when one is known and
 /// present, otherwise `path` unchanged (so the original error path runs).
 pub fn resolve_node(path: &str) -> String {
     if io_shim::exists(path) {
@@ -648,8 +645,8 @@ mod tests {
         mk(&r, "sys/devices/system/cpu/cpufreq/policy0/sugov_ext");
         w(&r, "sys/devices/system/cpu/cpufreq/policy0/scaling_governor", "sugov_ext");
         w(&r, "sys/devices/system/cpu/cpufreq/policy0/sugov_ext/rate_limit_us", "1000");
-        // The shipped HAL's "uag" directory does not exist; the active
-        // governor's equivalent resolves instead.
+        // The "uag" directory does not exist; the active governor's
+        // equivalent resolves instead.
         assert_eq!(
             resolve_node("/sys/devices/system/cpu/cpufreq/policy0/uag/up_rate_limit_us"),
             "/sys/devices/system/cpu/cpufreq/policy0/sugov_ext/rate_limit_us"

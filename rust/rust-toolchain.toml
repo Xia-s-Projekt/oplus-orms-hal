@@ -1,6 +1,4 @@
-# Pinned to the rustc that produced the staged HAL binary (see the verify
-# checklist in TODO.md): byte-identical reproduction of the staged artifact
-# only holds at this version.
+# Toolchain used by scripts/build_rust.sh for the release cross-build.
 [toolchain]
 channel = "1.99.1"
 profile = "minimal"

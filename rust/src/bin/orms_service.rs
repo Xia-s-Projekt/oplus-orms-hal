@@ -1,7 +1,6 @@
-// OPlus Orms HAL service entry point (Rust port).
+// OPlus Orms HAL service entry point.
 //
-// Startup recovered from the shipped binary and its init rc
-// (erofs/vendor/etc/init/ormsHalService-default.rc):
+// Startup sequence:
 //
 //   ABinderProcess_setThreadPoolMaxThreadCount(4);
 //   ABinderProcess_startThreadPool();
@@ -59,7 +58,7 @@ fn main() {
     }
 
     // The default instance is a single literal so the exact fqname is
-    // statically visible in the binary, as it is in the shipped C++ build.
+    // statically visible in the binary.
     const DEFAULT_INSTANCE: &str =
         "vendor.oplus.hardware.ormsHalService.IOrmsAidlHalService/default";
     let name = match std::env::var("OPLUS_ORMS_INSTANCE") {
