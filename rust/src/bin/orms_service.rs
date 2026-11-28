@@ -61,9 +61,15 @@ fn main() {
     // statically visible in the binary.
     const DEFAULT_INSTANCE: &str =
         "vendor.oplus.hardware.ormsHalService.IOrmsAidlHalService/default";
-    let name = match std::env::var("OPLUS_ORMS_INSTANCE") {
-        Ok(suffix) if !suffix.is_empty() => format!("{}/{}", DESCRIPTOR, suffix),
-        _ => DEFAULT_INSTANCE.to_string(),
+    // Diagnostic-only instance override: production always registers the
+    // shipped "/default" instance unless central debug is enabled.
+    let name = if orms_service::io_shim::debug_enabled() {
+        match std::env::var("OPLUS_ORMS_INSTANCE") {
+            Ok(suffix) if !suffix.is_empty() => format!("{}/{}", DESCRIPTOR, suffix),
+            _ => DEFAULT_INSTANCE.to_string(),
+        }
+    } else {
+        DEFAULT_INSTANCE.to_string()
     };
     let instance = CString::new(name.clone()).unwrap();
     // SAFETY: binder is a live AIBinder we own; instance is NUL-terminated.

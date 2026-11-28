@@ -56,6 +56,29 @@ scripts/
 
 [Get Prebuilt](https://github.com/Xia-s-Projekt/oplus-orms-hal/releases/latest) — AArch64 ODM archive containing the service under `odm/bin/hw/`, its init rc under `odm/etc/init/`, and the VINTF manifest under `odm/etc/vintf/manifest/`.
 
+## Central debug logging
+
+All verbose logging in this repo is gated by one property shared across the
+Rianixia HALs:
+
+```
+persist.vendor.rianixia.debug   # vendor alias, checked FIRST
+persist.sys.rianixia.debug      # canonical property
+```
+
+Set either to `1` or `true` (case-insensitive) to enable, for example:
+
+```sh
+adb root
+adb shell setprop persist.sys.rianixia.debug 1
+```
+
+Unset, `0`, `false` or any other value disables verbose logging. Production
+devices are quiet by default. ERROR/FATAL lines for genuine failures are
+always emitted. Diagnostic-only hooks (instance-suffix overrides, dump
+triggers, runtime log-level switches) are honoured only while this debug prop
+is enabled.
+
 ## Build
 
 ```sh

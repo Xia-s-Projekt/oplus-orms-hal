@@ -112,6 +112,11 @@ extern "C" {
 }
 
 pub fn log(level: c_int, tag: &str, msg: &str) {
+    // INFO and below are verbose; production logcat stays quiet unless the
+    // central Rianixia debug prop is enabled. ERROR is never gated.
+    if level <= LOG_LEVEL_INFO && !orms_service::io_shim::debug_enabled() {
+        return;
+    }
     let tag = match CString::new(tag) {
         Ok(t) => t,
         Err(_) => return,

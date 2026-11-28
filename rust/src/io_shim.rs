@@ -156,6 +156,48 @@ pub fn property_get(key: &str) -> Option<String> {
     with_props(|p| p.get(key).cloned())
 }
 
+/// The one central debug property shared by all Rianixia HALs. The vendor
+/// alias takes precedence when it is set; the canonical property is the
+/// fallback. "1" / "true" enable, everything else disables.
+pub const DEBUG_PROP_VENDOR: &str = "persist.vendor.rianixia.debug";
+pub const DEBUG_PROP_SYSTEM: &str = "persist.sys.rianixia.debug";
+
+pub fn debug_enabled() -> bool {
+    for key in [DEBUG_PROP_VENDOR, DEBUG_PROP_SYSTEM] {
+        if let Some(value) = property_get(key) {
+            return value == "1" || value.eq_ignore_ascii_case("true");
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod debug_gate_tests {
+    use super::*;
+
+    #[test]
+    fn central_debug_prop_semantics() {
+        let _g = test_lock();
+        clear_test_override();
+        assert!(!debug_enabled());
+        property_set(DEBUG_PROP_SYSTEM, "1");
+        assert!(debug_enabled());
+        property_set(DEBUG_PROP_VENDOR, "false");
+        assert!(!debug_enabled(), "vendor alias must win over the system prop");
+        property_set(DEBUG_PROP_VENDOR, "TRUE");
+        assert!(debug_enabled());
+        clear_test_override();
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn clear_test_override() {
+        with_props(|p| p.clear());
+    }
+
+    #[cfg(target_os = "android")]
+    fn clear_test_override() {}
+}
+
 #[cfg(not(target_os = "android"))]
 fn with_props<R>(f: impl FnOnce(&mut std::collections::HashMap<String, String>) -> R) -> R {
     use std::sync::Mutex;
