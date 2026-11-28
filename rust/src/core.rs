@@ -136,10 +136,11 @@ fn set_sim_boost_bit(service: &Service, bit: u32, active: bool) {
     if io_shim::exists("/dev/cpuctl/top-app/cpu.uclamp.min") {
         io_shim::write_file("/dev/cpuctl/top-app/cpu.uclamp.min", if next { "30" } else { "0" });
     }
+    // fpsgo sysfs: 1=force on, 0=force off, 2=auto; release restores auto.
     if io_shim::exists("/sys/kernel/fpsgo/common/force_onoff") {
         io_shim::write_file(
             "/sys/kernel/fpsgo/common/force_onoff",
-            if next { "1" } else { "0" },
+            if next { "1" } else { "2" },
         );
     }
 }
@@ -696,7 +697,7 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         io_shim::set_test_root(root.to_str().unwrap());
         w(&root, "dev/cpuctl/top-app/cpu.uclamp.min", "0");
-        w(&root, "sys/kernel/fpsgo/common/force_onoff", "0");
+        w(&root, "sys/kernel/fpsgo/common/force_onoff", "2");
 
         let svc = service();
         orms_boost_acquire(&svc, 1, &[100]);
@@ -710,7 +711,7 @@ mod tests {
 
         orms_write_touch_boost(&svc, "0");
         assert_eq!(read(&root, "dev/cpuctl/top-app/cpu.uclamp.min"), "0");
-        assert_eq!(read(&root, "sys/kernel/fpsgo/common/force_onoff"), "0");
+        assert_eq!(read(&root, "sys/kernel/fpsgo/common/force_onoff"), "2");
 
         io_shim::clear_test_root();
         let _ = fs::remove_dir_all(&root);
